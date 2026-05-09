@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Companies House Explorer</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    header {
+      display: flex;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 0.25rem 1rem;
+      margin-bottom: 2rem;
+    }
+
+    header h1 {
+      font-size: 1.6rem;
+      font-weight: 600;
+      color: #f8fafc;
+      width: 100%;
+    }
+
+    header p {
+      font-size: 0.875rem;
+      color: #94a3b8;
+      flex: 1;
+    }
+
+    header p a {
+      color: #94a3b8;
+    }
+
+    header p a:hover {
+      color: #e2e8f0;
+    }
+
+    header > a {
+      font-size: 0.8rem;
+      color: #94a3b8;
+      text-decoration: none;
+      white-space: nowrap;
+      margin-left: auto;
+    }
+
+    header > a:hover {
+      color: #e2e8f0;
+    }
+
+    .card {
+      background: #1e2130;
+      border: 1px solid #2d3148;
+      border-radius: 8px;
+      padding: 1.25rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .card-label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #94a3b8;
+      margin-bottom: 0.75rem;
+    }
+
+    .presets {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .preset-btn {
+      background: #2d3148;
+      border: 1px solid #3d4268;
+      border-radius: 5px;
+      color: #94a3b8;
+      cursor: pointer;
+      font-size: 0.8rem;
+      padding: 0.4rem 0.75rem;
+      transition: all 0.15s;
+    }
+
+    .preset-btn:hover {
+      background: #3d4268;
+      color: #e2e8f0;
+    }
+
+    .preset-btn.active {
+      background: #3b4fd8;
+      border-color: #4f63e7;
+      color: #fff;
+    }
+
+    #query {
+      width: 100%;
+      background: #13151f;
+      border: 1px solid #2d3148;
+      border-radius: 6px;
+      color: #e2e8f0;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 0.85rem;
+      line-height: 1.6;
+      min-height: 120px;
+      padding: 0.75rem 1rem;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    #query:focus {
+      border-color: #4f63e7;
+    }
+
+    .query-footer {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-top: 0.75rem;
+    }
+
+    #run-btn {
+      background: #3b4fd8;
+      border: none;
+      border-radius: 6px;
+      color: #fff;
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 500;
+      padding: 0.5rem 1.25rem;
+      transition: background 0.15s;
+    }
+
+    #run-btn:hover:not(:disabled) {
+      background: #4f63e7;
+    }
+
+    #run-btn:disabled {
+      background: #2d3148;
+      color: #64748b;
+      cursor: not-allowed;
+    }
+
+    #status {
+      font-size: 0.8rem;
+      color: #94a3b8;
+    }
+
+    #status.error { color: #f87171; }
+    #status.success { color: #4ade80; }
+    #status.loading { color: #facc15; }
+
+    .spinner {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border: 2px solid #facc15;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .results-meta {
+      font-size: 0.75rem;
+      color: #94a3b8;
+      margin-bottom: 0.75rem;
+    }
+
+    .results-meta span {
+      color: #94a3b8;
+      font-weight: 500;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+    }
+
+    table {
+      border-collapse: collapse;
+      font-size: 0.8rem;
+      min-width: 100%;
+      white-space: nowrap;
+    }
+
+    th {
+      background: #13151f;
+      border-bottom: 1px solid #2d3148;
+      color: #c4cfdf;
+      font-weight: 600;
+      padding: 0.5rem 0.75rem;
+      text-align: left;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    td {
+      border-bottom: 1px solid #1a1d2e;
+      color: #cbd5e1;
+      max-width: 400px;
+      overflow: hidden;
+      padding: 0.45rem 0.75rem;
+      text-overflow: ellipsis;
+    }
+
+    tr:hover td {
+      background: #1a1d2e;
+    }
+
+
+    .query-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.5rem;
+    }
+
+    .field-insert-wrap {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .field-insert-wrap label {
+      font-size: 0.72rem;
+      color: #94a3b8;
+      white-space: nowrap;
+    }
+
+    #field-insert {
+      background: #13151f;
+      border: 1px solid #2d3148;
+      border-radius: 5px;
+      color: #94a3b8;
+      font-size: 0.78rem;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      padding: 0.3rem 0.5rem;
+      outline: none;
+      cursor: pointer;
+      max-width: 300px;
+    }
+
+    #field-insert:focus { border-color: #4f63e7; }
+    #field-insert option { color: #e2e8f0; }
+    #field-insert optgroup { color: #94a3b8; font-style: normal; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>UK Company Data Explorer</h1>
+  <p>5.7M UK companies &mdash; DuckDB-WASM + Parquet, running entirely in your browser &mdash; Data source: <a href="https://download.companieshouse.gov.uk/en_output.html" target="_blank" rel="noopener">Companies House</a></p>
+  <a href="treemap.html">🗂 See also: SIC TreeMap →</a>
+</header>
+
+<div class="card">
+  <div class="card-label">Example queries</div>
+  <div class="presets" id="presets"></div>
+</div>
+
+<div class="card">
+  <div class="query-toolbar">
+    <div class="card-label" style="margin-bottom:0">SQL Query</div>
+    <div class="field-insert-wrap">
+      <label for="field-insert">Insert field</label>
+      <select id="field-insert">
+        <option value="">— pick a column —</option>
+        <optgroup label="Company">
+          <option value="CompanyName">CompanyName</option>
+          <option value="CompanyNumber">CompanyNumber</option>
+          <option value="CompanyCategory">CompanyCategory</option>
+          <option value="CompanyStatus">CompanyStatus</option>
+          <option value="IncorporationDate">IncorporationDate</option>
+          <option value="DissolutionDate">DissolutionDate</option>
+          <option value="CountryOfOrigin">CountryOfOrigin</option>
+          <option value="URI">URI</option>
+        </optgroup>
+        <optgroup label="SIC Codes">
+          <option value='"SICCode.SicText_1"'>SICCode.SicText_1</option>
+          <option value='"SICCode.SicText_2"'>SICCode.SicText_2</option>
+          <option value='"SICCode.SicText_3"'>SICCode.SicText_3</option>
+          <option value='"SICCode.SicText_4"'>SICCode.SicText_4</option>
+        </optgroup>
+        <optgroup label="Registered Address">
+          <option value='"RegAddress.CareOf"'>RegAddress.CareOf</option>
+          <option value='"RegAddress.POBox"'>RegAddress.POBox</option>
+          <option value='"RegAddress.AddressLine1"'>RegAddress.AddressLine1</option>
+          <option value='"RegAddress.AddressLine2"'>RegAddress.AddressLine2</option>
+          <option value='"RegAddress.PostTown"'>RegAddress.PostTown</option>
+          <option value='"RegAddress.County"'>RegAddress.County</option>
+          <option value='"RegAddress.Country"'>RegAddress.Country</option>
+          <option value='"RegAddress.PostCode"'>RegAddress.PostCode</option>
+        </optgroup>
+        <optgroup label="Accounts">
+          <option value='"Accounts.AccountRefDay"'>Accounts.AccountRefDay</option>
+          <option value='"Accounts.AccountRefMonth"'>Accounts.AccountRefMonth</option>
+          <option value='"Accounts.NextDueDate"'>Accounts.NextDueDate</option>
+          <option value='"Accounts.LastMadeUpDate"'>Accounts.LastMadeUpDate</option>
+          <option value='"Accounts.AccountCategory"'>Accounts.AccountCategory</option>
+        </optgroup>
+        <optgroup label="Returns &amp; Officers">
+          <option value='"Returns.NextDueDate"'>Returns.NextDueDate</option>
+          <option value='"Returns.LastMadeUpDate"'>Returns.LastMadeUpDate</option>
+          <option value='"LimitedPartnerships.NumGenPartners"'>LimitedPartnerships.NumGenPartners</option>
+          <option value='"LimitedPartnerships.NumLimPartners"'>LimitedPartnerships.NumLimPartners</option>
+        </optgroup>
+        <optgroup label="Mortgages">
+          <option value='"Mortgages.NumMortCharges"'>Mortgages.NumMortCharges</option>
+          <option value='"Mortgages.NumMortOutstanding"'>Mortgages.NumMortOutstanding</option>
+          <option value='"Mortgages.NumMortPartSatisfied"'>Mortgages.NumMortPartSatisfied</option>
+          <option value='"Mortgages.NumMortSatisfied"'>Mortgages.NumMortSatisfied</option>
+        </optgroup>
+        <optgroup label="Confirmation Statement">
+          <option value='"ConfStmtNextDueDate"'>ConfStmtNextDueDate</option>
+          <option value='"ConfStmtLastMadeUpDate"'>ConfStmtLastMadeUpDate</option>
+        </optgroup>
+      </select>
+    </div>
+  </div>
+  <textarea id="query" spellcheck="false"></textarea>
+  <div class="query-footer">
+    <button id="run-btn" disabled>Initialising&hellip;</button>
+    <span id="status"><span class="spinner"></span> Loading DuckDB-WASM&hellip;</span>
+  </div>
+</div>
+
+<div class="card" id="results-card" style="display:none">
+  <div class="card-label">Results</div>
+  <div class="results-meta" id="results-meta"></div>
+  <div class="table-wrap" id="results-table"></div>
+</div>
+
+<script type="module">
+import * as duckdb from 'https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.29.0/+esm';
+
+// ── Virtual view name used inside all SQL queries ───────────────────────────
+const VFILE = 'companies';
+
+// ── Field-insert dropdown ─────────────────────────────────────────────────────
+const fieldInsert = document.getElementById('field-insert');
+
+fieldInsert.addEventListener('change', () => {
+  const value = fieldInsert.value;
+  if (!value) return;
+  fieldInsert.value = ''; // reset immediately
+
+  const ta = document.getElementById('query');
+  const start = ta.selectionStart;
+  const end   = ta.selectionEnd;
+  ta.value = ta.value.slice(0, start) + value + ta.value.slice(end);
+
+  const cursor = start + value.length;
+  ta.setSelectionRange(cursor, cursor);
+  ta.focus();
+});
+
+// ── Preset queries ────────────────────────────────────────────────────────────
+const PRESETS = [
+  {
+    label: 'Companies by category',
+    query: `SELECT CompanyCategory,
+       COUNT(*) AS total,
+       SUM(CASE WHEN CompanyStatus = 'Active' THEN 1 ELSE 0 END) AS active
+FROM ${VFILE}
+GROUP BY CompanyCategory
+ORDER BY total DESC`
+  },
+  {
+    label: 'Top 20 SIC codes',
+    query: `SELECT sic, COUNT(*) AS total
+FROM (
+  SELECT CompanyNumber, "SICCode.SicText_1" AS sic FROM ${VFILE} WHERE CompanyStatus = 'Active' AND "SICCode.SicText_1" IS NOT NULL
+  UNION ALL
+  SELECT CompanyNumber, "SICCode.SicText_2" FROM ${VFILE} WHERE CompanyStatus = 'Active' AND "SICCode.SicText_2" IS NOT NULL
+  UNION ALL
+  SELECT CompanyNumber, "SICCode.SicText_3" FROM ${VFILE} WHERE CompanyStatus = 'Active' AND "SICCode.SicText_3" IS NOT NULL
+  UNION ALL
+  SELECT CompanyNumber, "SICCode.SicText_4" FROM ${VFILE} WHERE CompanyStatus = 'Active' AND "SICCode.SicText_4" IS NOT NULL
+)
+GROUP BY sic
+ORDER BY total DESC
+LIMIT 20`
+  },
+  {
+    label: 'Oldest active companies',
+    query: `SELECT CompanyName, CompanyNumber, IncorporationDate,
+       CompanyCategory, CompanyStatus
+FROM ${VFILE}
+WHERE CompanyStatus = 'Active'
+  AND IncorporationDate IS NOT NULL
+ORDER BY IncorporationDate ASC
+LIMIT 20`
+  },
+  {
+    label: 'Breweries & pubs',
+    query: `SELECT "SICCode.SicText_1" AS sic,
+       COUNT(*) AS total_active,
+       SUM(CASE WHEN IncorporationDate >= current_date - INTERVAL 1 YEAR THEN 1 ELSE 0 END) AS new_last_12m
+FROM ${VFILE}
+WHERE CompanyStatus = 'Active'
+  AND "SICCode.SicText_1" IN (
+    '11050 - Manufacture of beer',
+    '11010 - Distilling, rectifying and blending of spirits',
+    '11020 - Manufacture of wine from grape',
+    '11030 - Manufacture of cider and other fruit wines',
+    '56302 - Public houses and bars',
+    '56301 - Licensed clubs'
+  )
+GROUP BY sic
+ORDER BY total_active DESC`
+  },
+  {
+    label: 'New incorporations by month',
+    query: `SELECT strftime(IncorporationDate, '%Y-%m') AS month,
+       COUNT(*) AS incorporated
+FROM ${VFILE}
+WHERE IncorporationDate >= current_date - INTERVAL 2 YEAR
+  AND IncorporationDate IS NOT NULL
+GROUP BY month
+ORDER BY month DESC`
+  },
+  {
+    label: 'London vs rest of UK',
+    query: `SELECT
+  CASE
+    WHEN "RegAddress.PostCode" ILIKE 'E %' OR "RegAddress.PostCode" ILIKE 'EC%'
+      OR "RegAddress.PostCode" ILIKE 'N %' OR "RegAddress.PostCode" ILIKE 'NW%'
+      OR "RegAddress.PostCode" ILIKE 'SE%' OR "RegAddress.PostCode" ILIKE 'SW%'
+      OR "RegAddress.PostCode" ILIKE 'W %' OR "RegAddress.PostCode" ILIKE 'WC%'
+      OR "RegAddress.PostCode" ILIKE 'W1%' OR "RegAddress.PostCode" ILIKE 'W2%'
+    THEN 'London'
+    ELSE 'Rest of UK'
+  END AS region,
+  COUNT(*) AS total,
+  SUM(CASE WHEN CompanyStatus = 'Active' THEN 1 ELSE 0 END) AS active
+FROM ${VFILE}
+WHERE "RegAddress.PostCode" IS NOT NULL
+GROUP BY region`
+  },
+];
+
+// ── Boot DuckDB-WASM ──────────────────────────────────────────────────────────
+const statusEl = document.getElementById('status');
+const runBtn = document.getElementById('run-btn');
+const queryEl = document.getElementById('query');
+
+function setStatus(msg, cls = '') {
+  statusEl.className = cls;
+  statusEl.innerHTML = msg;
+}
+
+let db, conn;
+
+async function initDuckDB() {
+  const bundles = duckdb.getJsDelivrBundles();
+  const bundle = await duckdb.selectBundle(bundles);
+
+  const workerUrl = URL.createObjectURL(
+    new Blob([`importScripts("${bundle.mainWorker}");`], { type: 'text/javascript' })
+  );
+  const worker = new Worker(workerUrl);
+  const logger = new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING);
+  db = new duckdb.AsyncDuckDB(logger, worker);
+  await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+  conn = await db.connect();
+  URL.revokeObjectURL(workerUrl);
+}
+
+async function registerParquet() {
+  const base = new URL('./', window.location.href).href;
+  await db.registerFileURL('data_0.parquet', base + 'companies_0.parquet', duckdb.DuckDBDataProtocol.HTTP, false);
+  await db.registerFileURL('data_1.parquet', base + 'companies_1.parquet', duckdb.DuckDBDataProtocol.HTTP, false);
+  await db.registerFileURL('data_2.parquet', base + 'companies_2.parquet', duckdb.DuckDBDataProtocol.HTTP, false);
+  await conn.query(`CREATE OR REPLACE VIEW companies AS SELECT * FROM read_parquet(['data_0.parquet','data_1.parquet','data_2.parquet'])`);
+}
+
+// ── Preset buttons ─────────────────────────────────────────────────────────
+const presetsEl = document.getElementById('presets');
+let activePreset = null;
+
+PRESETS.forEach((p, i) => {
+  const btn = document.createElement('button');
+  btn.className = 'preset-btn';
+  btn.textContent = p.label;
+  btn.addEventListener('click', () => {
+    presetsEl.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activePreset = i;
+    queryEl.value = p.query;
+  });
+  presetsEl.appendChild(btn);
+});
+
+// Set first preset as default
+presetsEl.querySelectorAll('.preset-btn')[0].click();
+
+// ── Run query ───────────────────────────────────────────────────────────────
+async function runQuery() {
+  const sql = queryEl.value.trim();
+  if (!sql || !conn) return;
+
+  const resultsCard = document.getElementById('results-card');
+  const resultsMeta = document.getElementById('results-meta');
+  const resultsTable = document.getElementById('results-table');
+
+  runBtn.disabled = true;
+  setStatus('<span class="spinner"></span> Running query&hellip;', 'loading');
+  resultsCard.style.display = 'none';
+  resultsTable.innerHTML = '';
+
+  const t0 = performance.now();
+
+  try {
+    await registerParquet();
+
+    const result = await conn.query(sql);
+    const elapsed = ((performance.now() - t0) / 1000).toFixed(2);
+
+    const rows = result.toArray();
+    const schema = result.schema.fields;
+
+    setStatus(`✓ ${rows.length.toLocaleString()} row${rows.length !== 1 ? 's' : ''} in ${elapsed}s`, 'success');
+
+    resultsMeta.innerHTML = `<span>${rows.length.toLocaleString()}</span> rows &mdash; <span>${elapsed}s</span>`;
+
+    // Build table
+    const table = document.createElement('table');
+    const thead = table.createTHead();
+    const hr = thead.insertRow();
+    schema.forEach(f => {
+      const th = document.createElement('th');
+      th.textContent = f.name;
+      hr.appendChild(th);
+    });
+
+    const tbody = table.createTBody();
+    rows.forEach(row => {
+      const tr = tbody.insertRow();
+      schema.forEach(f => {
+        const td = tr.insertCell();
+        const val = row[f.name];
+        td.textContent = val === null || val === undefined ? '' : String(val);
+      });
+    });
+
+    resultsTable.appendChild(table);
+    resultsCard.style.display = '';
+
+  } catch (err) {
+    setStatus('✗ ' + err.message, 'error');
+  } finally {
+    runBtn.disabled = false;
+    runBtn.textContent = 'Run Query';
+  }
+}
+
+runBtn.addEventListener('click', runQuery);
+
+queryEl.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') runQuery();
+});
+
+// ── Initialise ─────────────────────────────────────────────────────────────
+(async () => {
+  try {
+    await initDuckDB();
+    runBtn.disabled = false;
+    runBtn.textContent = 'Run Query';
+    setStatus('Ready &mdash; Cmd/Ctrl+Enter to run', '');
+  } catch (err) {
+    setStatus('Failed to load DuckDB: ' + err.message, 'error');
+  }
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Companies by SIC – TreeMap</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; display: flex; flex-direction: column; }
+
+    header { padding: 1.25rem 2rem 0.75rem; border-bottom: 1px solid #1e2130; display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap; }
+    header h1 { font-size: 1.3rem; font-weight: 600; color: #f8fafc; }
+    header p { font-size: 0.8rem; color: #94a3b8; }
+    header p a { color: #94a3b8; text-decoration: none; }
+    header p a:hover { color: #e2e8f0; }
+    header > a { font-size: 0.8rem; color: #94a3b8; text-decoration: none; margin-left: auto; }
+    header > a:hover { color: #e2e8f0; }
+
+    .controls { padding: 0.75rem 2rem; display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; border-bottom: 1px solid #1e2130; }
+
+    .seg { display: flex; gap: 0; background: #1e2130; border: 1px solid #2d3148; border-radius: 6px; overflow: hidden; }
+    .seg button { background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 0.8rem; padding: 0.35rem 0.85rem; transition: all .15s; }
+    .seg button:not(:last-child) { border-right: 1px solid #2d3148; }
+    .seg button.active { background: #3b4fd8; color: #fff; }
+    .seg button:hover:not(.active) { background: #2d3148; color: #e2e8f0; }
+
+    .filter-wrap { display: flex; align-items: center; gap: 0.5rem; }
+    .filter-wrap label { font-size: 0.75rem; color: #94a3b8; }
+    select { background: #1e2130; border: 1px solid #2d3148; border-radius: 5px; color: #e2e8f0; font-size: 0.8rem; padding: 0.35rem 0.5rem; outline: none; cursor: pointer; }
+    select:focus { border-color: #4f63e7; }
+
+    #status-bar { padding: 0.5rem 2rem; font-size: 0.78rem; color: #94a3b8; min-height: 1.8rem; }
+    #status-bar.error { color: #f87171; }
+    #status-bar.ok { color: #4ade80; }
+    .spinner { display: inline-block; width: 9px; height: 9px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: spin .6s linear infinite; margin-right: 5px; vertical-align: middle; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .chart-wrap { flex: 1; display: flex; min-height: 0; overflow: hidden; }
+    #chart { flex: 1; min-height: 0; }
+
+    /* ── Company panel ── */
+    #company-panel {
+      width: 0; overflow: hidden;
+      transition: width .25s ease;
+      background: #13151f;
+      border-left: 1px solid #1e2130;
+      display: flex; flex-direction: column;
+      flex-shrink: 0;
+    }
+    #company-panel.open { width: 380px; }
+    .panel-header {
+      padding: 0.9rem 1rem 0.8rem;
+      border-bottom: 1px solid #1e2130;
+      display: flex; align-items: flex-start; gap: 0.5rem;
+    }
+    .panel-header-text { flex: 1; min-width: 0; }
+    .panel-sic-code { font-size: 0.7rem; color: #94a3b8; margin-bottom: 0.2rem; }
+    .panel-title { font-size: 0.95rem; font-weight: 600; color: #f1f5f9; line-height: 1.3; word-break: break-word; }
+    .panel-count { font-size: 0.75rem; color: #94a3b8; margin-top: 0.3rem; }
+    .panel-close {
+      background: none; border: none; color: #94a3b8; cursor: pointer;
+      font-size: 1rem; line-height: 1; padding: 2px 4px; border-radius: 4px;
+      flex-shrink: 0; margin-top: 1px;
+    }
+    .panel-close:hover { color: #e2e8f0; background: #1e2130; }
+    .panel-body { overflow-y: auto; flex: 1; padding: 0.5rem 0; }
+    .panel-loading { padding: 1.5rem 1rem; text-align: center; color: #94a3b8; font-size: 0.8rem; }
+    .company-row {
+      padding: 0.55rem 1rem;
+      border-bottom: 1px solid #1a1d2e;
+      display: flex; flex-direction: column; gap: 0.2rem;
+    }
+    .company-row:last-child { border-bottom: none; }
+    .company-row:hover { background: #1a1d2e; }
+    .company-name {
+      font-size: 0.82rem; font-weight: 600; color: #e2e8f0;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .company-name a { color: inherit; text-decoration: none; }
+    .company-name a:hover { color: #818cf8; text-decoration: underline; }
+    .company-meta { font-size: 0.72rem; color: #94a3b8; display: flex; gap: 0.75rem; flex-wrap: wrap; }
+    .company-meta span { white-space: nowrap; }
+    .panel-more { padding: 0.75rem 1rem; font-size: 0.75rem; color: #7a8fa8; text-align: center; border-top: 1px solid #1e2130; }
+
+    .breadcrumb { padding: 0.4rem 2rem; font-size: 0.78rem; color: #7a8fa8; min-height: 1.6rem; }
+    .breadcrumb span { cursor: pointer; color: #94a3b8; }
+    .breadcrumb span:hover { color: #e2e8f0; text-decoration: underline; }
+    .breadcrumb span.current { color: #94a3b8; cursor: default; text-decoration: none; }
+    .breadcrumb .sep { margin: 0 0.35rem; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Companies by SIC Code – TreeMap</h1>
+  <p>Data source: <a href="https://download.companieshouse.gov.uk/en_output.html" target="_blank" rel="noopener">Companies House</a></p>
+  <a href="index.html"> Explore company data with SQL →</a>
+</header>
+
+<div class="controls">
+  <div class="filter-wrap">
+    <label>Status</label>
+    <select id="status-filter">
+      <option value="Active">Active only</option>
+      <option value="">All companies</option>
+    </select>
+  </div>
+  <div class="filter-wrap">
+    <label>View</label>
+    <div class="seg" id="depth-seg">
+      <button class="active" data-depth="1">Sections</button>
+      <button data-depth="2">Divisions</button>
+      <button data-depth="3">Groups</button>
+    </div>
+  </div>
+  <div class="filter-wrap">
+    <label>SIC fields</label>
+    <div class="seg" id="field-seg">
+      <button class="active" data-fields="1">Primary only</button>
+      <button data-fields="4">All 4 fields</button>
+    </div>
+  </div>
+</div>
+
+<div class="breadcrumb" id="breadcrumb"></div>
+<div id="status-bar"><span class="spinner"></span> Loading DuckDB-WASM…</div>
+<div class="chart-wrap">
+  <div id="chart"></div>
+  <div id="company-panel">
+    <div class="panel-header">
+      <div class="panel-header-text">
+        <div class="panel-sic-code" id="panel-sic-code"></div>
+        <div class="panel-title" id="panel-title"></div>
+        <div class="panel-count" id="panel-count"></div>
+      </div>
+      <button class="panel-close" id="panel-close" title="Close">✕</button>
+    </div>
+    <div class="panel-body" id="panel-body"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<script type="module">
+import * as duckdb from 'https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.29.0/+esm';
+
+// ── Config ──────────────────────────────────────────────────────────────────
+const META_PATH    = './sic_meta.json';
+const VFILE        = 'companies';
+
+// Section colour palette (one per section letter A-U)
+const SECTION_COLOURS = {
+  A:'#22c55e', B:'#a16207', C:'#3b82f6', D:'#eab308', E:'#06b6d4',
+  F:'#f97316', G:'#8b5cf6', H:'#ec4899', I:'#14b8a6', J:'#6366f1',
+  K:'#f43f5e', L:'#84cc16', M:'#0ea5e9', N:'#d946ef', O:'#fb923c',
+  P:'#34d399', Q:'#fb7185', R:'#a78bfa', S:'#fbbf24', T:'#94a3b8', U:'#64748b'
+};
+
+// ── State ────────────────────────────────────────────────────────────────────
+let db, conn, sicMeta;
+let drillPath    = [];     // stack of node ids we've drilled into
+let cachedCounts = null;   // last fetched { code → count } map
+let maxDepth     = 1;      // 1=sections, 2=divisions, 3=groups
+let useAllFields = false;
+let statusFilter = 'Active';
+
+// ── ECharts ──────────────────────────────────────────────────────────────────
+const chartEl = document.getElementById('chart');
+const chart   = echarts.init(chartEl, null, { renderer: 'canvas' });
+new ResizeObserver(() => chart.resize()).observe(chartEl);
+
+// ── Company panel ────────────────────────────────────────────────────────────
+const panel      = document.getElementById('company-panel');
+const panelBody  = document.getElementById('panel-body');
+const CH_BASE    = 'https://find-and-update.company-information.service.gov.uk/company/';
+const PANEL_LIMIT = 200;
+
+document.getElementById('panel-close').addEventListener('click', closePanel);
+function closePanel() { panel.classList.remove('open'); setTimeout(() => chart.resize(), 260); }
+
+async function showCompanyPanel(id) {
+  const meta = sicMeta[id];
+  document.getElementById('panel-sic-code').textContent = `SIC ${id}`;
+  document.getElementById('panel-title').textContent = meta?.title ?? id;
+  document.getElementById('panel-count').textContent = '';
+  panelBody.innerHTML = '<div class="panel-loading"><span class="spinner"></span> Loading…</div>';
+  panel.classList.add('open');
+  setTimeout(() => chart.resize(), 260);
+
+  try {
+    const statusClause = statusFilter ? `AND CompanyStatus = '${statusFilter}'` : '';
+    // Match on primary SIC field; if useAllFields also match on 2-4
+    const sic = id.replace(/'/g, "''");
+    let whereClause;
+    if (useAllFields) {
+      whereClause = `(
+        regexp_extract("SICCode.SicText_1", '^(\\d+)') = '${sic}' OR
+        regexp_extract("SICCode.SicText_2", '^(\\d+)') = '${sic}' OR
+        regexp_extract("SICCode.SicText_3", '^(\\d+)') = '${sic}' OR
+        regexp_extract("SICCode.SicText_4", '^(\\d+)') = '${sic}'
+      ) AND length('${sic}') = 5`;
+    } else {
+      whereClause = `regexp_extract("SICCode.SicText_1", '^(\\d+)') = '${sic}'
+        AND length(regexp_extract("SICCode.SicText_1", '^(\\d+)')) = 5`;
+    }
+
+    const rows = await conn.query(`
+      SELECT CompanyName, CompanyNumber, IncorporationDate,
+             "RegAddress.PostCode" AS postcode,
+             "SICCode.SicText_1"   AS sic1
+      FROM ${VFILE}
+      WHERE ${whereClause} ${statusClause}
+      ORDER BY CompanyName
+      LIMIT ${PANEL_LIMIT + 1}
+    `);
+    const arr = rows.toArray();
+    const hasMore = arr.length > PANEL_LIMIT;
+    const display = hasMore ? arr.slice(0, PANEL_LIMIT) : arr;
+
+    document.getElementById('panel-count').textContent =
+      `${(cachedCounts?.[id] ?? arr.length).toLocaleString()} companies`;
+
+    if (display.length === 0) {
+      panelBody.innerHTML = '<div class="panel-loading">No companies found.</div>';
+      return;
+    }
+
+    panelBody.innerHTML = display.map(r => {
+      const num  = String(r.CompanyNumber ?? '');
+      const name = String(r.CompanyName ?? '').trim();
+      const date = r.IncorporationDate ? String(r.IncorporationDate).slice(0, 10) : '—';
+      const pc   = String(r.postcode ?? '').trim();
+      const chUrl = `${CH_BASE}${encodeURIComponent(num)}`;
+      return `<div class="company-row">
+        <div class="company-name"><a href="${chUrl}" target="_blank" rel="noopener">${escHtml(name) || num}</a></div>
+        <div class="company-meta">
+          <span title="Company number">#${escHtml(num)}</span>
+          ${date !== '—' ? `<span title="Incorporated">inc. ${date}</span>` : ''}
+          ${pc ? `<span>${escHtml(pc)}</span>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+
+    if (hasMore) {
+      panelBody.insertAdjacentHTML('beforeend',
+        `<div class="panel-more">Showing first ${PANEL_LIMIT} of ${(cachedCounts?.[id] ?? '?').toLocaleString()} — use the SQL Explorer for full results</div>`);
+    }
+  } catch (err) {
+    panelBody.innerHTML = `<div class="panel-loading" style="color:#f87171">${escHtml(err.message)}</div>`;
+  }
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+const statusEl = document.getElementById('status-bar');
+function setStatus(msg, cls = '') {
+  statusEl.className = cls;
+  statusEl.innerHTML = msg;
+}
+
+async function registerParquet() {
+  const base = new URL('./', window.location.href).href;
+  await db.registerFileURL('data_0.parquet', base + 'companies_0.parquet', duckdb.DuckDBDataProtocol.HTTP, false);
+  await db.registerFileURL('data_1.parquet', base + 'companies_1.parquet', duckdb.DuckDBDataProtocol.HTTP, false);
+  await db.registerFileURL('data_2.parquet', base + 'companies_2.parquet', duckdb.DuckDBDataProtocol.HTTP, false);
+  await conn.query(`CREATE OR REPLACE VIEW companies AS SELECT * FROM read_parquet(['data_0.parquet','data_1.parquet','data_2.parquet'])`);
+}
+
+// ── Init DuckDB ──────────────────────────────────────────────────────────────
+async function initDuckDB() {
+  const bundles = duckdb.getJsDelivrBundles();
+  const bundle  = await duckdb.selectBundle(bundles);
+  const workerUrl = URL.createObjectURL(
+    new Blob([`importScripts("${bundle.mainWorker}");`], { type: 'text/javascript' })
+  );
+  const worker = new Worker(workerUrl);
+  const logger = new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING);
+  db = new duckdb.AsyncDuckDB(logger, worker);
+  await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+  conn = await db.connect();
+  URL.revokeObjectURL(workerUrl);
+}
+
+// ── Query parquet for SIC counts ─────────────────────────────────────────────
+async function fetchCounts() {
+  await registerParquet();
+  const statusClause = statusFilter ? `AND CompanyStatus = '${statusFilter}'` : '';
+
+  // Only include 5-digit SIC-2007 codes. Old 4-digit codes predate SIC 2007
+  // and collide with unrelated SIC-2007 class numbers (e.g. old "5030 - Sale of
+  // motor vehicle parts" vs SIC-2007 class 5030 = Inland water transport).
+  let sql;
+  if (useAllFields) {
+    const parts = [1,2,3,4].map(i => `
+      SELECT regexp_extract("SICCode.SicText_${i}", '^(\\d+)') AS code, COUNT(*) AS n
+      FROM ${VFILE}
+      WHERE "SICCode.SicText_${i}" IS NOT NULL ${statusClause}
+        AND length(regexp_extract("SICCode.SicText_${i}", '^(\\d+)')) = 5
+      GROUP BY code`);
+    sql = `SELECT code, SUM(n) AS n FROM (${parts.join(' UNION ALL ')}) WHERE code != '' GROUP BY code`;
+  } else {
+    sql = `
+      SELECT regexp_extract("SICCode.SicText_1", '^(\\d+)') AS code, COUNT(*) AS n
+      FROM ${VFILE}
+      WHERE "SICCode.SicText_1" IS NOT NULL ${statusClause}
+        AND length(regexp_extract("SICCode.SicText_1", '^(\\d+)')) = 5
+      GROUP BY code
+      HAVING code != ''`;
+  }
+
+  const rows = await conn.query(sql);
+  const counts = {};
+  for (const row of rows.toArray()) {
+    counts[String(row.code)] = Number(row.n);
+  }
+  return counts;
+}
+
+// ── Build display data ────────────────────────────────────────────────────────
+// Returns the array of top-level nodes for ECharts, built fresh from the
+// current drillPath root so drill-down always works regardless of maxDepth.
+function buildDisplayData(counts) {
+  // Roll up leaf counts to every ancestor
+  const rolled = {};
+  for (const [code, n] of Object.entries(counts)) {
+    if (!n) continue;
+    let nodeId = code;
+    while (nodeId !== null) {
+      rolled[nodeId] = (rolled[nodeId] || 0) + n;
+      nodeId = sicMeta[nodeId]?.parent ?? null;
+    }
+  }
+
+  function findSection(id) {
+    let cur = id;
+    while (cur && cur.length > 1) cur = sicMeta[cur]?.parent;
+    return cur ?? 'A';
+  }
+
+  function makeNode(id, depth) {
+    const meta  = sicMeta[id];
+    const title = meta?.title ?? id;
+    const value = rolled[id] ?? 0;
+    const letter = id.length === 1 ? id : findSection(id);
+    const colour = SECTION_COLOURS[letter] ?? '#94a3b8';
+
+    const node = {
+      id,
+      name: `${id}\n${title}`,
+      label_title: title,
+      value,
+      itemStyle: { color: colour + (depth === 1 ? 'cc' : '88') },
+    };
+
+    if (depth < maxDepth) {
+      const children = Object.entries(sicMeta)
+        .filter(([, v]) => v.parent === id)
+        .map(([childId]) => makeNode(childId, depth + 1))
+        .filter(c => c.value > 0)
+        .sort((a, b) => b.value - a.value);
+      if (children.length) node.children = children;
+    }
+
+    return node;
+  }
+
+  // When drilled in, show children of the deepest drilled node.
+  // Otherwise show all top-level sections.
+  const rootId = drillPath.length > 0 ? drillPath[drillPath.length - 1] : null;
+
+  const sourceIds = rootId === null
+    ? Object.entries(sicMeta).filter(([, v]) => v.level === 0).map(([id]) => id)
+    : Object.entries(sicMeta).filter(([, v]) => v.parent === rootId).map(([id]) => id);
+
+  return sourceIds
+    .map(id => makeNode(id, 1))
+    .filter(n => n.value > 0)
+    .sort((a, b) => b.value - a.value);
+}
+
+// ── Render ───────────────────────────────────────────────────────────────────
+function formatN(n) {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+  if (n >= 1_000)     return (n / 1_000).toFixed(0) + 'k';
+  return n.toLocaleString();
+}
+
+function renderTree(counts) {
+  const displayData = buildDisplayData(counts);
+
+  updateBreadcrumb();
+
+  chart.setOption({
+    backgroundColor: '#0f1117',
+    tooltip: {
+      formatter(p) {
+        if (!p.data.id) return '';
+        const n = p.data.value;
+        const title = p.data.label_title ?? p.data.id;
+        return `<b>${p.data.id}</b><br>${title}<br><b>${n.toLocaleString()}</b> companies`;
+      }
+    },
+    series: [{
+      type: 'treemap',
+      data: displayData,
+      width: '100%',
+      height: '100%',
+      top: 0, left: 0, bottom: 0, right: 0,
+      roam: false,
+      nodeClick: false,
+      drillDownIcon: '',
+      breadcrumb: { show: false },
+      label: {
+        show: true,
+        formatter(p) {
+          const id  = p.data.id ?? '';
+          const t   = p.data.label_title ?? '';
+          const n   = p.data.value ?? 0;
+          const short = t.length > 40 ? t.slice(0, 38) + '…' : t;
+          return `{id|${id}}\n{title|${short}}\n{n|${formatN(n)}}`;
+        },
+        rich: {
+          id:    { fontSize: 11, fontWeight: 700, color: '#fff',     lineHeight: 18 },
+          title: { fontSize: 10, color: '#ffffffcc',                  lineHeight: 15, width: 140, overflow: 'truncate' },
+          n:     { fontSize: 12, fontWeight: 700, color: '#ffffffee', lineHeight: 18 },
+        },
+        position: 'insideTopLeft',
+      },
+      upperLabel: {
+        show: true,
+        height: 22,
+        formatter: p => ` ${p.data.id ?? ''} – ${p.data.label_title ?? ''}`,
+        fontSize: 11,
+        color: '#fff',
+        fontWeight: 600,
+      },
+      itemStyle: { borderWidth: 2, borderColor: '#0f1117', gapWidth: 2 },
+      levels: [
+        { itemStyle: { borderWidth: 3, borderColor: '#0f1117', gapWidth: 3 } },
+        { itemStyle: { borderWidth: 2, borderColor: '#0f111788' } },
+        { itemStyle: { borderWidth: 1, borderColor: '#0f111755' } },
+      ],
+    }],
+  }, true);
+}
+
+// ── History / URL state ───────────────────────────────────────────────────────
+function pushNav(newPath) {
+  const hash = newPath.length ? '#' + newPath.join(',') : '#';
+  history.pushState({ drillPath: newPath }, '', hash);
+}
+
+function replaceNav(newPath) {
+  const hash = newPath.length ? '#' + newPath.join(',') : '#';
+  history.replaceState({ drillPath: newPath }, '', hash);
+}
+
+function pathFromHash() {
+  const h = location.hash.slice(1); // strip '#'
+  return h ? h.split(',').filter(Boolean) : [];
+}
+
+window.addEventListener('popstate', e => {
+  drillPath = e.state?.drillPath ?? pathFromHash();
+  closePanel();
+  if (cachedCounts) renderTree(cachedCounts);
+});
+
+// ── Breadcrumb ────────────────────────────────────────────────────────────────
+function updateBreadcrumb() {
+  const bc = document.getElementById('breadcrumb');
+  const parts = [{ id: null, label: 'All Sections' }, ...drillPath.map(id => {
+    const m = sicMeta[id];
+    return { id, label: `${id} – ${m?.title ?? ''}` };
+  })];
+
+  bc.innerHTML = parts.map((p, i) => {
+    const cls = i === parts.length - 1 ? 'current' : '';
+    return `<span class="${cls}" data-idx="${i}">${p.label}</span>`;
+  }).join('<span class="sep">›</span>');
+
+  bc.querySelectorAll('span[data-idx]').forEach(el => {
+    el.addEventListener('click', () => {
+      const idx = Number(el.dataset.idx);
+      drillPath = drillPath.slice(0, idx);
+      pushNav(drillPath);
+      renderTree(cachedCounts);
+    });
+  });
+}
+
+// ── Click: drill down or show company list ───────────────────────────────────
+chart.on('click', p => {
+  if (!p.data?.id) return;
+  const id = p.data.id;
+  if (!sicMeta[id]) return;
+  const hasChildren = Object.values(sicMeta).some(v => v.parent === id);
+  if (hasChildren) {
+    closePanel();
+    drillPath.push(id);
+    pushNav(drillPath);
+    renderTree(cachedCounts);
+  } else {
+    // Leaf node — show company list
+    showCompanyPanel(id);
+  }
+});
+
+// ── Controls ──────────────────────────────────────────────────────────────────
+document.getElementById('depth-seg').querySelectorAll('button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#depth-seg button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    maxDepth = Number(btn.dataset.depth);
+    drillPath = [];
+    replaceNav(drillPath);
+    if (cachedCounts) renderTree(cachedCounts);
+  });
+});
+
+document.getElementById('field-seg').querySelectorAll('button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#field-seg button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    useAllFields = btn.dataset.fields === '4';
+    drillPath = [];
+    replaceNav(drillPath);
+    reload();
+  });
+});
+
+document.getElementById('status-filter').addEventListener('change', e => {
+  statusFilter = e.target.value;
+  drillPath = [];
+  replaceNav(drillPath);
+  reload();
+});
+
+// ── Main flow ─────────────────────────────────────────────────────────────────
+async function reload() {
+  setStatus('<span class="spinner"></span> Querying…', '');
+  try {
+    cachedCounts = await fetchCounts();
+    renderTree(cachedCounts);
+    const total = Object.values(cachedCounts).reduce((a, b) => a + b, 0);
+    setStatus(`✓ ${total.toLocaleString()} companies across ${Object.keys(cachedCounts).length} SIC-2007 codes (legacy 4-digit codes excluded)`, 'ok');
+  } catch (err) {
+    setStatus('✗ ' + err.message, 'error');
+  }
+}
+
+(async () => {
+  try {
+    setStatus('<span class="spinner"></span> Loading SIC hierarchy…');
+    const [, metaResp] = await Promise.all([
+      initDuckDB(),
+      fetch(META_PATH).then(r => r.json()),
+    ]);
+    sicMeta = metaResp;
+    // Restore drill path from URL hash if present
+    drillPath = pathFromHash();
+    replaceNav(drillPath);
+    setStatus('<span class="spinner"></span> Querying parquet…');
+    await reload();
+  } catch (err) {
+    setStatus('✗ ' + err.message, 'error');
+  }
+})();
+</script>
+
+</body>
+</html>

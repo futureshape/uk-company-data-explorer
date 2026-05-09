@@ -1,0 +1,11 @@
+# Monolithic file — replaced by 3 chunks below (too large for GitHub at 211 MB)
+companies.parquet
+
+# Local exploration scripts, databases and outputs
+exploration/
+
+# Python virtual environment
+.venv/
+
+# macOS
+.DS_Store
