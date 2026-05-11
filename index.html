@@ -177,7 +177,23 @@
       font-size: 0.75rem;
       color: #94a3b8;
       margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
     }
+
+    #download-csv {
+      margin-left: auto;
+      padding: 0.2rem 0.6rem;
+      font-size: 0.75rem;
+      background: transparent;
+      color: #94a3b8;
+      border: 1px solid #2d3148;
+      border-radius: 4px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    #download-csv:hover { color: #e2e8f0; border-color: #94a3b8; }
 
     .results-meta span {
       color: #94a3b8;
@@ -326,7 +342,10 @@
 
 <div class="card" id="results-card" style="display:none">
   <div class="card-label">Results</div>
-  <div class="results-meta" id="results-meta"></div>
+  <div class="results-meta" id="results-meta">
+    <span id="results-meta-text"></span>
+    <button id="download-csv" style="display:none">⬇ Download CSV</button>
+  </div>
   <div id="results-grid" class="ag-theme-quartz-dark"></div>
 </div>
 
@@ -523,7 +542,10 @@ async function runQuery() {
   if (!sql || !conn) return;
 
   const resultsCard = document.getElementById('results-card');
-  const resultsMeta = document.getElementById('results-meta');
+  const resultsMeta = document.getElementById('results-meta-text');
+  document.getElementById('download-csv').addEventListener('click', () => {
+    if (gridApi) gridApi.exportDataAsCsv({ fileName: 'companies-query.csv' });
+  });
 
   runBtn.disabled = true;
   setStatus('<span class="spinner"></span> Running query&hellip;', 'loading');
@@ -544,6 +566,7 @@ async function runQuery() {
     setStatus(`✓ ${rows.length.toLocaleString()} row${rows.length !== 1 ? 's' : ''} in ${elapsed}s`, 'success');
 
     resultsMeta.innerHTML = `<span>${rows.length.toLocaleString()}</span> rows &mdash; <span>${elapsed}s</span>`;
+    document.getElementById('download-csv').style.display = '';
 
     // Classify each column using Arrow schema type metadata.
     // Constructor names from Apache Arrow JS:
