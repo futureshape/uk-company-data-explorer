@@ -184,40 +184,25 @@
       font-weight: 500;
     }
 
-    .table-wrap {
-      overflow-x: auto;
+    #results-grid {
+      height: 520px;
+      width: 100%;
     }
 
-    table {
-      border-collapse: collapse;
-      font-size: 0.8rem;
-      min-width: 100%;
-      white-space: nowrap;
-    }
-
-    th {
-      background: #13151f;
-      border-bottom: 1px solid #2d3148;
-      color: #c4cfdf;
-      font-weight: 600;
-      padding: 0.5rem 0.75rem;
-      text-align: left;
-      font-size: 0.72rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-
-    td {
-      border-bottom: 1px solid #1a1d2e;
-      color: #cbd5e1;
-      max-width: 400px;
-      overflow: hidden;
-      padding: 0.45rem 0.75rem;
-      text-overflow: ellipsis;
-    }
-
-    tr:hover td {
-      background: #1a1d2e;
+    /* AG Grid theme overrides to match app palette */
+    .ag-theme-quartz-dark {
+      --ag-background-color: #1e2130;
+      --ag-header-background-color: #13151f;
+      --ag-border-color: #2d3148;
+      --ag-secondary-border-color: #2d3148;
+      --ag-row-hover-color: #1a1d2e;
+      --ag-header-foreground-color: #c4cfdf;
+      --ag-foreground-color: #cbd5e1;
+      --ag-odd-row-background-color: #1e2130;
+      --ag-font-size: 13px;
+      --ag-row-height: 34px;
+      --ag-header-height: 34px;
+      --ag-cell-horizontal-padding: 12px;
     }
 
 
@@ -257,6 +242,8 @@
     #field-insert option { color: #e2e8f0; }
     #field-insert optgroup { color: #94a3b8; font-style: normal; }
   </style>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@32.2.2/styles/ag-grid.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@32.2.2/styles/ag-theme-quartz.min.css">
 </head>
 <body>
 
@@ -340,9 +327,10 @@
 <div class="card" id="results-card" style="display:none">
   <div class="card-label">Results</div>
   <div class="results-meta" id="results-meta"></div>
-  <div class="table-wrap" id="results-table"></div>
+  <div id="results-grid" class="ag-theme-quartz-dark"></div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/ag-grid-community@32.2.2/dist/ag-grid-community.min.js"></script>
 <script type="module">
 import * as duckdb from 'https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.29.0/+esm';
 import LZString from 'https://cdn.jsdelivr.net/npm/lz-string@1.5.0/+esm';
@@ -464,6 +452,7 @@ function setStatus(msg, cls = '') {
 }
 
 let db, conn;
+let gridApi = null;
 
 async function initDuckDB() {
   const bundles = duckdb.getJsDelivrBundles();
@@ -535,12 +524,11 @@ async function runQuery() {
 
   const resultsCard = document.getElementById('results-card');
   const resultsMeta = document.getElementById('results-meta');
-  const resultsTable = document.getElementById('results-table');
 
   runBtn.disabled = true;
   setStatus('<span class="spinner"></span> Running query&hellip;', 'loading');
   resultsCard.style.display = 'none';
-  resultsTable.innerHTML = '';
+  if (gridApi) { gridApi.destroy(); gridApi = null; }
 
   const t0 = performance.now();
 
@@ -557,27 +545,67 @@ async function runQuery() {
 
     resultsMeta.innerHTML = `<span>${rows.length.toLocaleString()}</span> rows &mdash; <span>${elapsed}s</span>`;
 
-    // Build table
-    const table = document.createElement('table');
-    const thead = table.createTHead();
-    const hr = thead.insertRow();
+    // Classify each column using Arrow schema type metadata.
+    // Constructor names from Apache Arrow JS:
+    //   Numeric : Int8/16/32/64, Uint8/16/32/64, Float16/32/64, Decimal
+    //   Date/TS : DateDay, DateMillisecond, TimestampSecond/Millisecond/Microsecond/Nanosecond
+    // Classify columns using Arrow typeId from schema metadata.
+    // Apache Arrow JS type IDs (not affected by minification):
+    //   2 = Int (Int8/16/32/64, Uint8/16/32/64)
+    //   3 = Float (Float16/32/64)
+    //   7 = Decimal
+    //   8 = Date (DateDay / DateMillisecond)
+    //   10 = Timestamp (all variants)
+    //   5 = Utf8, 6 = Bool, etc.
+    const NUMERIC_IDS = new Set([2, 3, 7]);
+    const DATE_IDS    = new Set([8, 10]);
+    const colKind = {};
     schema.forEach(f => {
-      const th = document.createElement('th');
-      th.textContent = f.name;
-      hr.appendChild(th);
+      const id = f.type?.typeId;
+      if (NUMERIC_IDS.has(id))   colKind[f.name] = 'numeric';
+      else if (DATE_IDS.has(id)) colKind[f.name] = 'date';
+      else                        colKind[f.name] = 'text';
     });
 
-    const tbody = table.createTBody();
-    rows.forEach(row => {
-      const tr = tbody.insertRow();
+    const rowData = rows.map(row => {
+      const obj = {};
       schema.forEach(f => {
-        const td = tr.insertCell();
         const val = row[f.name];
-        td.textContent = val === null || val === undefined ? '' : String(val);
+        if (val === null || val === undefined) {
+          obj[f.name] = null;
+        } else if (colKind[f.name] === 'numeric') {
+          // Int64 may arrive as native bigint or as a boxed Arrow object
+          obj[f.name] = typeof val === 'bigint' ? Number(val) : Number(val);
+        } else if (colKind[f.name] === 'date') {
+          // DuckDB-WASM returns Date/Timestamp values as epoch-millisecond numbers, not Date objects.
+          // Convert to ISO YYYY-MM-DD string (lexicographically sortable).
+          if (typeof val === 'number') {
+            obj[f.name] = new Date(val).toISOString().slice(0, 10);
+          } else if (val instanceof Date) {
+            obj[f.name] = val.toISOString().slice(0, 10);
+          } else {
+            obj[f.name] = String(val);
+          }
+        } else {
+          obj[f.name] = val;
+        }
       });
+      return obj;
     });
 
-    resultsTable.appendChild(table);
+    const colDefs = schema.map(f => ({
+      field: f.name,
+      headerName: f.name,
+      ...(colKind[f.name] === 'numeric' ? { type: 'numericColumn' } : {}),
+    }));
+
+    gridApi = agGrid.createGrid(document.getElementById('results-grid'), {
+      columnDefs: colDefs,
+      rowData,
+      defaultColDef: { resizable: true, sortable: true, minWidth: 80, flex: 1 },
+      enableCellTextSelection: true,
+      ensureDomOrder: true,
+    });
     resultsCard.style.display = '';
 
   } catch (err) {
