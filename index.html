@@ -345,6 +345,7 @@
 
 <script type="module">
 import * as duckdb from 'https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.29.0/+esm';
+import LZString from 'https://cdn.jsdelivr.net/npm/lz-string@1.5.0/+esm';
 
 // ── Virtual view name used inside all SQL queries ───────────────────────────
 const VFILE = 'companies';
@@ -487,6 +488,20 @@ async function registerParquet() {
   await conn.query(`CREATE OR REPLACE VIEW companies AS SELECT * FROM read_parquet(['data_0.parquet','data_1.parquet','data_2.parquet'])`);
 }
 
+// ── URL ↔ query sync ──────────────────────────────────────────────────────
+function updateURL(sql) {
+  const encoded = LZString.compressToEncodedURIComponent(sql);
+  history.replaceState(null, '', '#q=' + encoded);
+}
+
+function getQueryFromURL() {
+  const hash = location.hash;
+  if (hash.startsWith('#q=')) {
+    return LZString.decompressFromEncodedURIComponent(hash.slice(3));
+  }
+  return null;
+}
+
 // ── Preset buttons ─────────────────────────────────────────────────────────
 const presetsEl = document.getElementById('presets');
 let activePreset = null;
@@ -500,12 +515,18 @@ PRESETS.forEach((p, i) => {
     btn.classList.add('active');
     activePreset = i;
     queryEl.value = p.query;
+    updateURL(p.query);
   });
   presetsEl.appendChild(btn);
 });
 
-// Set first preset as default
-presetsEl.querySelectorAll('.preset-btn')[0].click();
+// Set initial query from URL or fall back to first preset
+const urlQuery = getQueryFromURL();
+if (urlQuery) {
+  queryEl.value = urlQuery;
+} else {
+  presetsEl.querySelectorAll('.preset-btn')[0].click();
+}
 
 // ── Run query ───────────────────────────────────────────────────────────────
 async function runQuery() {
@@ -571,6 +592,10 @@ runBtn.addEventListener('click', runQuery);
 
 queryEl.addEventListener('keydown', e => {
   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') runQuery();
+});
+
+queryEl.addEventListener('input', () => {
+  updateURL(queryEl.value);
 });
 
 // ── Initialise ─────────────────────────────────────────────────────────────
