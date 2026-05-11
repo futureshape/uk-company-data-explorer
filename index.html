@@ -594,7 +594,11 @@ async function runQuery() {
     });
 
     const colDefs = schema.map(f => ({
-      field: f.name,
+      // AG Grid treats dots in `field` as nested-object path separators, so use a
+      // valueGetter for any column whose name contains a dot (e.g. "RegAddress.PostCode").
+      ...(f.name.includes('.')
+        ? { valueGetter: p => p.data[f.name] }
+        : { field: f.name }),
       headerName: f.name,
       ...(colKind[f.name] === 'numeric' ? { type: 'numericColumn' } : {}),
     }));
